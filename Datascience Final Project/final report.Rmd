@@ -1,0 +1,441 @@
+---
+title: "Final Project - Chess"
+author: "Kyle Sherman"
+date: "4/16/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readr)
+library(ggridges)
+```
+
+# Overview and Motivation
+
+Due to the nature of Chess, it should be possible to either player to come out on top. It is precisely this aspect of the game that makes it difficult to tell who is winning the game at face value until the last move has been made - at least without the use of advanced machine learning algorithms. Even with these algorithms, every move has a profound impact on the outcome of the match.
+
+Like many others around the globe, Chess is a game I have long been interested in - though I am far from the definition of a good player. While playing against a friend of mine, losing more matches than I care to admit, I realized that this project could be a good opportunity for me to understand what factors of the game I could use to improve more efficiently. 
+
+To help determine what individual aspects of the game has an impact on the outcome, and thus may help me improve, I have compiled graphs of different factors as well as my interpretation of what they mean.
+
+
+# Initial Questions
+Initially I wanted to research the following questions: 
+
+  1. Is there an implicit bias in favor of the white piece as a result of getting the first move?
+  2. Which opening’s have the highest win rate, and which have the lowest win rate?
+  3. Is there a correlation between the above and the player’s ELO (skill rating)?
+  4. Can the outcome of a game be predicted using machine learning?
+  
+As I researched the dataset more and the questions I can answer due to its limitations, these questions developed into the following:
+
+1. Is there an implicit bias in favor of the white piece as a result of getting the first move?
+2. What variables are useful in predicting who will win a game?  
+
+These are the two primary questions I want to solve.
+
+To answer these questions I will be using a dataset from Kaggle.
+The dataset contains over 20,000 Chess games from the 2nd largest online Chess platform LiChess.com
+
+Dataset - https://www.kaggle.com/datasets/datasnaek/chess
+
+
+# Exploratory Data Analysis
+
+## Loading and Exploring the Data
+
+### Load the data into a dataframe
+
+Before anything can be done with the data, it must first be loaded using the read.csv() function.
+After loading the data, look at the head and tail to see what the fields look like.
+``` {r load chess_games}
+chess_games <- read.csv("Data/chess_games.csv")
+
+head(chess_games)
+tail(chess_games)
+```
+
+### Glimpse of the data
+Now that we have a summary of what the data looks like, we can look at the actual data itself. To do this, we can use the glimpse function.
+```{r glimpse}
+glimpse(chess_games)
+```
+
+### Summary of the data
+Looking at a summary of the data can give a general idea of what the data looks like and what values are being dealt with.
+```{r summary}
+summary(chess_games)
+```
+
+## Data Transformation
+Once we have looked at and explored the data, we should have a better understanding of what we are working with.
+Now that we know what the data looks like, we can start mutating the data to get rid of what we don't need and manipulate the columns to have more useful meanings. This is essential because the data may not always be formatted in such a way that it can be immediately useful. It is also important to correct for any missing values or other issues that may skew the final results.
+
+### Removing Unnecessary Columns
+After looking at the fields, I immediately know that the fields 'id', 'created_at', 'last_move_at', 'white_id', 'black_id', and 'moves' will not be needed, so it is safe to drop those fields. I will save these changes to a new data-frame called chess2.
+```{r remove fields}
+chess2 <- chess_games %>% 
+  select(-id, -created_at, -last_move_at, -white_id, -black_id, -moves)
+
+glimpse(chess2)
+```
+
+### Cleaning the Data
+
+One concern that I have is regarding the potential for results to be skewed when looking at non-rated games. When games are not rated the players are more likely to be playing against friends, trying something new, or messing around which could have a negative impact on the accuracy of the games. Filtering out this condition will only lose 3,903 games out of the 20,058 in the dataset, but could help increase the accuracy of the data.
+
+```{r clean data}
+chess3 <- chess2 %>% 
+  filter(rated=="TRUE") %>%
+  select(-rated)
+
+nrow(chess2)-nrow(chess3)
+
+head(chess3)
+```
+
+Another concern I have is regarding the win condition. There are 4 possible win conditions: Mate, Draw, Resign, Out of Time. Let's graph these to see what the impact may be. My concern is that games ending in a resignation or out of time may be the result of external factors.
+
+``` {r}
+chess3 %>% 
+  ggplot(aes(x = victory_status, color = winner, fill = winner)) +
+  geom_bar(alpha = 0.7) +
+  labs(title = "Outcome of Game by Winner",
+       x = "Outcome",
+       y = "Number of Games")
+```
+
+After looking at the graph, I have decided that it is best to not filter the outcome conditions 'resign' and 'outoftime'. When considering the proportions of the conditions that ended in a white victory, black victory, or draw they appear to be mostly the same, so it should not have a negative impact on the outcome of the match.
+
+
+### Adding to the data
+There are a few columns that I believe will help better understand the data.
+
+Here I will add the following columns:  
+  1. rating_difference: the difference in rating level between white and black. Positive when white is higher and negative when black is higher.  
+  2. average_rating: this is the average rating level between the two players.  
+  3. advantage: this is a categorical value to determine who has an advantage. An advantage is found when one player's skill level is higher than the others.  
+
+These columns will be added to a new data frame called chess4.
+```{r}
+
+chess4 <- chess3 %>% 
+  mutate(rating_difference = white_rating-black_rating) %>% 
+  mutate(average_rating = (white_rating+black_rating)/2) %>% 
+  mutate(advantage=case_when(rating_difference > 0 ~ "White Advantage",
+                             rating_difference == 0 ~ "No Advantage",
+                             rating_difference < 0 ~ "Black Advantage"))
+
+glimpse(chess4)
+```
+Next I will add a shortened version of the opening name. This will just make it easier to deal with later on.
+``` {r}
+chess4 <- chess4 %>% 
+  mutate(short_opening = opening_name) %>% 
+  mutate(short_opening = str_remove_all(short_opening, pattern = "\\|[^|]*$"))
+
+head(chess4)
+```
+
+Next I will add a column for advantage level.
+This will be similar to what we added before, but instead of just noting who has an advantage, I will look at how significant of an advantage they have.
+I calculate this level by determining the Q1, Q2, and Q3 values and using those as a cut off.  
+  1. MAB - if the rating difference is less than the Q1 value, then black has a major advantage  
+  2. SAB - if the rating difference is less than the Q2 value, then black has a slight advantage  
+  3. SAW - if the rating difference is less than or equal to the Q3 value, then white has a slight advantage  
+  4. MAW - if the rating difference is greater than the Q3 value, then white has a major advantage  
+  5. No Advantage - if the two players have the same rating level, then rating_difference will equal the Q2 value of zero.  
+```{r}
+# Set the interquartile ranges for categorizing the difference rating
+Q1_rating <- summary(chess4$rating_difference) [2] # first quartile
+Q2_rating <- summary(chess4$rating_difference) [3] # second quartile
+Q3_rating <- summary(chess4$rating_difference) [5] # third quartile
+
+chess4 <- chess4 %>% 
+  mutate(advantage_level = case_when( rating_difference < Q1_rating ~ "MAB",
+                                      rating_difference < Q2_rating ~ "SAB",
+                                      rating_difference == Q2_rating ~ "No Advantage",
+                                      rating_difference <= Q3_rating ~ "SAW",
+                                      rating_difference > Q3_rating ~ "MAW"))
+
+head(chess4)
+```
+
+The final column I want to add will be the skill level.
+Once again, I used the Q1, Q2, and Q3 of the average_rating value to define the cut off for skill groupings. The following are the values:
+  1. Low Skill - average rating is less than or equal to the Q1 value
+  2. Medium Skill - average rating is less than the Q3 value
+  3. High Skill - Average rating is greater than or equal to the Q3 value
+  
+Initialy, I had used an arbitrary cutoff value, but using the interquartile ranges felt more natural and a better way of determining the cutoff values.
+
+``` {r}
+Q1_skill <- summary(chess4$average_rating) [2] # first quartile
+Q2_skill <- summary(chess4$average_rating) [3] # second quartile
+Q3_skill <- summary(chess4$average_rating) [5] # third quartile
+
+chess4 <- chess4 %>% 
+    mutate(skill_level = case_when( average_rating <= Q1_skill ~ "Low Skill",
+                                  average_rating < Q3_skill ~ "Medium Skill",
+                                  average_rating >= Q3_skill ~ "High Skill"))
+
+# transform(chess4, skill_level = factor(skill_level, levels = c("Low Skill", "Medium Skill", "High Skill")))
+head(chess4)
+
+chess5 <- chess4 %>%
+  filter(rating_difference <= Q3_rating & rating_difference >= Q1_rating)
+
+head(chess5)
+```
+
+Next, I want to determine if I should filter out games in which the two players rating are too far apart indicating that the players are not evenly matched.
+``` {r}
+chess4 %>% 
+  ggplot(aes(x=white_rating, y=black_rating, color=winner)) +
+  geom_point(alpha=0.25) +
+  geom_smooth(method = "lm", size=1) +
+  labs(title = "Correlation Between Player Ratings in Each Game",
+       subtitle = "Colored by Winner",
+       x = "White Rating",
+       y = "Black Rating",
+       caption = "Source: Chess Game Dataset (Lichess)")
+```
+
+The graph shows a strong positive correlation indicating that the two players skill levels tend to be relatively even. This would mean that the higher your rating, the higher your opponent's rating will likely be. The tells us that the matches are typically between two similarly ranked players. The trend line tells us that when white wins, they are generally higher ranked compared to when black wins. Based on this result, I have determined that it will not be necessary to filter out games in which the players are not evenly matched.
+
+
+#### Does white have a first move advantage?
+``` {r }
+chess4 %>% 
+  group_by(winner) %>% 
+  summarise(count = n()) %>% 
+  mutate(freq = count/sum(count)*100)
+```
+Looking at the above information, we can see that black wins 45.7% of the time, white wins 49.8% of the time, and the game ends in a draw 4.5% of the time. Based solely on these numbers, it doesn't appear that which has an initial advantage, however there is more to the story as you will find out in the next section.
+
+
+### Plotting the Data
+
+#### What is the relationship between win rate based on rating advantage of a player?
+I will look at games won compared by their basic rating advantage (i.e., black advantage or white advantage)
+```{r }
+chess4 %>% 
+  filter(rating_difference != 0) %>% 
+  ggplot(aes(x = advantage, color = winner, fill = winner)) +
+  geom_bar(alpha = 0.7) +
+  labs(title = "Games Won by Piece Color", 
+       subtitle = "compared by rating advantage",
+       x = "Advantage",
+       y = "Number of Games",
+       caption = "Source: Chess Game Dataset (Lichess)")
+```
+
+In the above graph, I have used the player advantage variable on the x-axis and colored the bars based on the match winner. Black advantage means that the black player had a higher rating than the white player. White advantage means that the white player had a higher rating than the black player.
+According to the bar graph, the winner of the match is favored 2 times out of 3 according to the player's color advantage.
+
+
+#### Is there a correlation between the level someone is advantaged and their win rates?
+I will look at games won compared by their advantage level (i.e., major advantage or slight advantage)
+```{r} 
+chess4 %>% 
+  filter(advantage_level != "No Advantage") %>% 
+  ggplot(aes(x = advantage_level, color = winner, fill = winner)) +
+  geom_bar(alpha = 0.7) +
+  labs(title = "Games Won by Piece Color", 
+       subtitle = "compared by rating advantage level",
+       x = "Advantage Level",
+       y = "Number of Games",
+       caption = "Source: Chess Game Dataset (Lichess)")
+```
+
+Here I have divided each of the advantage levels into 4 sections - major advantage black, slight advantage black, major advantage white, and slight advantage white. The graph above shows that when a player has a major advantage, they can be expected to win nearly 3 out of 4 games. When a player has only a slight advantage the possibility of winning is only about a half. Another interesting observation is that the number of games played where a player had a significant advantage is about the same as when a player has a slight advantage.
+
+To look at this again, we can revisit the graph from earlier:
+``` {r}
+chess4 %>% 
+  ggplot(aes(x=white_rating, y=black_rating, color=winner)) +
+  geom_point(alpha=0.25) +
+  geom_smooth(method = "lm", size=1) +
+  labs(title = "Correlation Between Player Ratings in Each Game",
+       subtitle = "Colored by Winner",
+       x = "White Rating",
+       y = "Black Rating",
+       caption = "Source: Chess Game Dataset (Lichess)")
+
+```
+
+As stated before: "The graph shows a strong positive correlation indicating that the two players skill levels tend to be relatively even. This would mean that the higher your rating, the higher your opponent's rating will likely be. The tells us that the matches are typically between two similarly ranked players. The trend line tells us that when white wins, they are generally higher ranked compared to when black wins. Based on this result, I have determined that it will not be necessary to filter out games in which the players are not evenly matched." From this graph we can also see that as the skill level of the players go up, so does the chance of the game ending in a draw. My presumption is that more skilled players are more likely to know how to react to another player's move with more precision and less randomness.
+
+
+#### What if we compare the graphs of Games won by outcome for players with the same rating vs the entire dataset?
+``` {r }
+
+chess4 %>% 
+  filter(rating_difference == 0) %>% 
+  ggplot(aes(x = winner, color = winner, fill = winner)) +
+  geom_bar(alpha = 0.7) +
+  labs(title = "Games Won by Outcome",
+       subtitle = "for players with same rating",
+       x = "Outcome",
+       y = "Number of Games", 
+       caption = "Source: Chess Game Dataset (Lichess)")
+```
+
+
+``` {r }
+
+chess4 %>% 
+  ggplot(aes(x = winner, color = winner, fill = winner)) +
+  geom_bar(alpha = 0.7) +
+  labs(title = "Games Won by Outcome",
+       subtitle = "across all games",
+       x = "Outcome",
+       y = "Number of Games",
+       caption = "Source: Chess Game Dataset (Lichess)")
+
+```
+
+The graphs above show that there tends to be the same ratio between black victory, draw, and white victory across the entire dataset as there for players with the same skill level.
+
+#### Does level of skill have an impact on the outcome?
+``` {r }
+
+chess5 <- transform(chess5, skill_level = factor(skill_level, levels = c("Low Skill", "Medium Skill", "High Skill")))
+
+chess5 %>% 
+  ggplot(aes(x = skill_level, color = winner, fill = winner)) +
+  geom_bar(alpha = 0.7) +
+  labs(title = "Games Won by Piece Color", 
+       subtitle = "based on skill level",
+       x = "Skill Level",
+       y = "Number of Games")
+```
+
+The graph above shows that regardless of the players skill level (low, medium, or high) the chance of them winning the game is relatively consistent.
+
+
+#### Does the number of turns in the game have an impact on the outcome?
+To answer this question I utilized a ridge graph. This graph is intended to show the distribution of the number of turns in a game as it relates to the outcome. I will use two methods to visualize this, though both show essentially the same thing.
+```{r, message=FALSE, warning=FALSE, paged.print=FALSE}
+chess4 %>% 
+  pivot_longer(turns) %>% 
+  ggplot(aes(y = winner, x = value, fill = winner)) +
+  geom_density_ridges(alpha = 0.7, bandwidth = 7.5) +
+  scale_fill_viridis_d(end = 0.75, option = "C") +
+  scale_colour_viridis_d(end=0.75, option = "C") + 
+  theme_minimal() + 
+  theme(legend.position = "none", 
+        axis.title.y = element_blank()) +
+  labs(title = "Game result",
+       subtitle = "based on number of turns",
+       x = "Number of Turns the game takes",
+       caption = "Source: Chess Game Dataset (Lichess)")
+
+chess4 %>% 
+  ggplot(aes(turns, fill = victory_status)) +
+  geom_density(alpha=0.3) +
+  facet_wrap(~winner, ncol = 1) +
+  labs(title = "Game result",
+       subtitle = "based on number of turns",
+       x = "Number of Turns the game takes",
+       caption = "Source: Chess Game Dataset (Lichess)")
+```
+
+From this graph we can see that to win a game takes roughly the same number of turns, which black having a slightly more narrow peak distribution. The peak distribution is likely due to the fact that white taking the first move makes it an offensive side, whereas the black player is reacting to white's moves. It can also be noted that the longer a game goes on, the more likely it is to end in a draw. This would indicate that the length of a game would be a good predictor of the outcome.
+
+
+#### Does the number of turns in the opening have an impact on the outcome?
+To answer this question I utilized a ridge graph. This graph is intended to show the distribution of the number of turns in an opening as it relates to the outcome. I will use two methods to visualize this, though both show essentially the same thing.
+``` {r}
+chess4 %>% 
+  pivot_longer(opening_ply) %>% 
+  ggplot(aes(y = winner, x = value, fill = winner)) +
+  geom_density_ridges(alpha = 0.7, bandwidth = 0.462) +
+  scale_fill_viridis_d(end = 0.75, option = "C") +
+  scale_colour_viridis_d(end=0.75, option = "C") + 
+  theme_minimal() + 
+  theme(legend.position = "none", 
+        axis.title.y = element_blank()) +
+  labs(x = "Number of Turns the opening takes", 
+       caption = "Source: Chess Game Dataset (Lichess)")
+
+chess4 %>% 
+  ggplot(aes(opening_ply, fill = victory_status)) +
+  geom_density(alpha=0.3) +
+  facet_wrap(~winner, ncol = 1) +
+  labs(title = "Game result",
+       subtitle = "based on number of turns in opening",
+       x = "Number of Turns the opening takes",
+       caption = "Source: Chess Game Dataset (Lichess)")
+```
+
+There are no major discernible difference in the distribution of the number of turns an opening has across outcomes. This would indicate that the number of moves in an opening is not a good predictor for the outcome of the game.
+
+
+#### Does the opening affects the win rate?  
+To answer this question I will use a bar graph showing the openings vs win percentage as it relates the winner.  
+```{r}
+grouped_games <- chess4 %>% 
+  group_by(short_opening, winner) %>% 
+  summarise(count=n())
+
+grouped_games %>% 
+  ggplot(aes(x = short_opening, y = count, fill = winner )) +
+  geom_bar(position="fill", stat="identity")+
+  theme_minimal()+
+  labs(x = "Opening",
+       y = "Win Ratio") +
+  theme(axis.text.x = element_blank()) + 
+  scale_fill_viridis_d(end=0.75, option="C")+
+  scale_color_viridis_d(end=0.75, option="C") + 
+  labs(caption = "Source: Chess Game Dataset (Lichess)")
+
+```
+
+This graph shows that while the majority of the openings are mostly balanced, there are openings which favor one side heavily. This would indicate that the opening used is highly predictive of the games outcome. However it should be noted that the data does not indicate which openings are the most played and which are the least played. It can be assumed that the openings most likely to be played will be balanced for the most part. The reason for this is that in order for an opening to be played it must be accepted by the opponent. If a given opening is not a balanced opening, it is not likely that the opponent will follow the required moves in order to play it through.
+
+
+#### Does rating have an effect on the outcome of a game?
+I would expect the side with a advantage to win more frequently as we saw prior. To further investigate these relationships I will use a violin plot. This type of plot will allow me to check the relationship between a quantitative variable and a categorical variable.
+``` {r}
+
+chess7 <- chess4 %>% 
+  mutate(outcome = case_when( winner == "white" ~ 1,
+                              winner == "black" ~ 0,
+                              winner == "draw" ~ 0.5))
+
+chess7 %>% 
+  ggplot(aes(x = rating_difference, y = outcome, color = winner, fill = winner)) +
+  geom_jitter(width = 0, height = 0.1, alpha = 0.5)+
+  geom_violin(alpha = 0.8, color = "white") +
+  theme_minimal() +
+  labs(x = "Rating Difference ( - Black, + white)",
+       y = "Outcome", 
+       caption = "Source: Chess Game Dataset (Lichess)") +
+  scale_fill_viridis_d(end=0.75, option="C") +
+  scale_color_viridis_d(end=0.75, option="C")
+
+```
+
+There is a large overlap in rating_difference for all 3 winner categories. Overall, this trend is not a surprise considering our previous investigation found that the match making system mostly matches players of similar skill. Additionally, it is not a surprise that white tends to win over black when outranking them as well as the other way around. It can also be noted that draws are most likely to occur when players are of similar rating, although there is a slight increase in the number of draws when white has the advantage. Overall, this graph indicates that the rating is a good predictor in the outcome of the game.
+
+# Final Analysis
+
+While Chess is a game of tactics and skill, there are some advantages that exist however slight they may be. I was able to find what variables have an impact on the outcome of the game and what variables don't seem to have any correlation at all. One change that I would have liked would be to find a data set that allows me to look at the variables as they change over time such as tracking a unique player's progression in the game. This would allow me to see how each variable changes the outcome in a more controlled environment. 
+
+There are 3 phases of a standard chess game with white getting the first move: The opening, the middlegame, and the endgame. While the middlegame and endgame do play an important role, the opening sets the stage for the flow and development of the rest of the game. A good opening will give a player an advantage when entering the middle game, prepare pieces to launch an attack, and set the defense all at the same time. They play such an important role that many professional players will spend years studying and perfecting different openings to see which ones will impact their game.
+
+I was unable to find a first move bias in favor of the white side, or at least one of significance. I did, however, find that a player of higher skill is more likely to take advantage of getting the first move by having a stronger opening, however that is mostly countered by an equally skilled black player being able to react more effectively.
+
+My findings indicate that the following variables are the best predictors for the outcome of a match:  
+  1. Player Rating  
+  2. Opening Played  
+  3. Number of Turns  
+  4. Rating Difference Between Players  
+  5. Starting side (white or black)  
+  
+I will likely continue to investigate using this data set and would eventually like to have a machine learning algorithm to predict the winner of a chess match using these findings.

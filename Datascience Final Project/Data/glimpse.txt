@@ -1,0 +1,19 @@
+> glimpse(chess_games)
+Rows: 20,058
+Columns: 16
+$ id             <chr> "TZJHLljE", "l1NXvwaE", "mIICvQHh", "kWKvrqYL", "9tXo1AUZ", "MsoDV9wj", "qwU9rasv", "RVN0N3VK", "dwF3DJHO", "afoMwnLg", "HgKLWPsz", "Vf5fKWzI", "HRti5mKv",~
+$ rated          <lgl> FALSE, TRUE, TRUE, TRUE, TRUE, FALSE, TRUE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, T~
+$ created_at     <dbl> 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.~
+$ last_move_at   <dbl> 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.5e+12, 1.~
+$ turns          <dbl> 13, 16, 61, 61, 95, 5, 33, 9, 66, 119, 39, 38, 60, 31, 31, 43, 52, 66, 101, 25, 14, 3, 17, 36, 13, 69, 43, 54, 53, 66, 64, 64, 54, 21, 11, 19, 28, 22, 37, ~
+$ victory_status <chr> "outoftime", "resign", "mate", "mate", "mate", "draw", "resign", "resign", "resign", "mate", "mate", "resign", "resign", "resign", "mate", "resign", "resig~
+$ winner         <chr> "white", "black", "white", "white", "white", "draw", "white", "black", "black", "white", "white", "black", "black", "black", "white", "black", "black", "bl~
+$ increment_code <chr> "15+2", "5+10", "5+10", "20+0", "30+3", "10+0", "10+0", "15+30", "15+0", "10+0", "20+60", "20+60", "5+40", "8+0", "15+15", "15+15", "15+15", "15+16", "15+1~
+$ white_id       <chr> "bourgris", "a-00", "ischia", "daniamurashov", "nik221107", "trelynn17", "capa_jr", "daniel_likes_chess", "ehabfanri", "daniel_likes_chess", "daniel_likes_~
+$ white_rating   <dbl> 1500, 1322, 1496, 1439, 1523, 1250, 1520, 1413, 1439, 1381, 1381, 1381, 1381, 1381, 1094, 1141, 1094, 1141, 1094, 1500, 1094, 1094, 1500, 1307, 1113, 1078,~
+$ black_id       <chr> "a-00", "skinnerua", "a-00", "adivanov2009", "adivanov2009", "franklin14532", "daniel_likes_chess", "soultego", "daniel_likes_chess", "mirco25", "anaissac"~
+$ black_rating   <dbl> 1191, 1261, 1500, 1454, 1469, 1002, 1423, 2108, 1392, 1209, 1272, 1867, 1936, 1607, 1141, 1094, 1141, 1094, 1300, 1094, 1676, 1068, 1094, 1106, 1423, 1219,~
+$ moves          <chr> "d4 d5 c4 c6 cxd5 e6 dxe6 fxe6 Nf3 Bb4+ Nc3 Ba5 Bf4", "d4 Nc6 e4 e5 f4 f6 dxe5 fxe5 fxe5 Nxe5 Qd4 Nc6 Qe5+ Nxe5 c4 Bb4+", "e4 e5 d3 d6 Be3 c6 Be2 b5 Nd2 a5~
+$ opening_eco    <chr> "D10", "B00", "C20", "D02", "C41", "B27", "D00", "B00", "C50", "B01", "A00", "C02", "C00", "C00", "C50", "C57", "C50", "C50", "C41", "D00", "C55", "A40", "~
+$ opening_name   <chr> "Slav Defense: Exchange Variation", "Nimzowitsch Defense: Kennedy Variation", "King's Pawn Game: Leonardis Variation", "Queen's Pawn Game: Zukertort Variat~
+$ opening_ply    <dbl> 5, 4, 3, 3, 5, 4, 10, 5, 6, 4, 1, 9, 3, 2, 8, 7, 8, 8, 5, 2, 6, 2, 3, 4, 3, 4, 8, 4, 4, 4, 3, 6, 3, 6, 3, 4, 10, 2, 17, 3, 10, 3, 3, 17, 3, 3, 2, 3, 17, 4,~
